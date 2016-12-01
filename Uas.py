@@ -3,6 +3,7 @@ import httplib2
 
 from email.mime.text import MIMEText
 
+from oauth2client import tools
 from apiclient.discovery import build
 from oauth2client.client import flow_from_clientsecrets
 from oauth2client.file import Storage
