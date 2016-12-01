@@ -11,7 +11,7 @@ from oauth2client.client import flow_from_clientsecrets
 from googleapiclient.errors import HttpError
 import json
 
-CLIENT_SECRETS_FILE = "client_secrets.json"
+CLIENT_SECRETS_FILE = "client_secret.json"
 YOUTUBE_READ_WRITE_SCOPE = "https://www.googleapis.com/auth/youtube"
 YOUTUBE_API_SERVICE_NAME = "youtube"
 YOUTUBE_API_VERSION = "v3"
