@@ -1,49 +1,53 @@
-import base64
 import httplib2
+import os
+import logging
 
-from email.mime.text import MIMEText
-
-from apiclient.discovery import build
-from oauth2client.client import flow_from_clientsecrets
+from oauth2client import tools
+# from oauth2client import run
 from oauth2client.file import Storage
-from oauth2client.tools import run
+# from oauth2client.client import AccessTokenRefreshError
+from googleapiclient.discovery import build
+from oauth2client.client import flow_from_clientsecrets
+from googleapiclient.errors import HttpError
+import json
+
+CLIENT_SECRETS_FILE = "client_secrets.json"
+YOUTUBE_READ_WRITE_SCOPE = "https://www.googleapis.com/auth/youtube"
+YOUTUBE_API_SERVICE_NAME = "youtube"
+YOUTUBE_API_VERSION = "v3"
+MISSING_CLIENT_SECRETS_MESSAGE = "Missing client secrets file"
 
 
-# Path to the client_secret.json file downloaded from the Developer Console
-CLIENT_SECRET_FILE = 'client_secret.json'
+def authenticate():
+    httplib2.debuglevel = 4
+    flow = flow_from_clientsecrets(CLIENT_SECRETS_FILE,
+                                   scope=YOUTUBE_READ_WRITE_SCOPE,
+                                   message=MISSING_CLIENT_SECRETS_MESSAGE)
+    storage = Storage("%s-oauth2.json")
+    credentials = storage.get()
+    if credentials is None or credentials.invalid:
+        print('invalid credentials')
+        credentials = run_flow(flow, storage)
 
-# Check https://developers.google.com/gmail/api/auth/scopes for all available scopes
-OAUTH_SCOPE = 'https://www.googleapis.com/auth/gmail.compose'
+    service = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION,
+                    http=credentials.authorize(httplib2.Http()))
 
-# Location of the credentials storage file
-STORAGE = Storage('gmail.storage')
+    tags = "classical music", "yehudi mehunin"
+    body = dict(
+        snippet=dict(
+            title="some title",
+            description="a  description",
+            tags=tags,
+            categoryId="4"
+        ),
+        status=dict(
+            privacyStatus="Private"
+        )
+    )
 
-# Start the OAuth flow to retrieve credentials
-flow = flow_from_clientsecrets(CLIENT_SECRET_FILE, scope=OAUTH_SCOPE)
-http = httplib2.Http()
+    thingy = service.videos().insert(part=",".join(body.keys()), body=None, media_body=MediaFileUpload(
+        "1977.mp4", mimetype="video/mp4", chunksize=1024 * 1024, resumable=False))
 
-# Try to retrieve credentials from storage or run the flow to generate them
-credentials = STORAGE.get()
-if credentials is None or credentials.invalid:
-  credentials = run(flow, STORAGE, http=http)
+    thingy.execute()
 
-# Authorize the httplib2.Http object with our credentials
-http = credentials.authorize(http)
-
-# Build the Gmail service from discovery
-gmail_service = build('gmail', 'v1', http=http)
-
-# create a message to send
-message = MIMEText("Message goes here.")
-message['to'] = "yourvictim@goes.here"
-message['from'] = "you@go.here"
-message['subject'] = "your subject goes here"
-body = {'raw': base64.b64encode(message.as_string())}
-
-# send it
-try:
-  message = (gmail_service.users().messages().send(userId="me", body=body).execute())
-  print('Message Id: %s' % message['id'])
-  print(message)
-except Exception as error:
-  print('An error occurred: %s' % error)
+authenticate()
