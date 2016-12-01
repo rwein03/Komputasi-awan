@@ -1,50 +1,63 @@
-import base64
 import httplib2
-
+import os
+import oauth2client
+from oauth2client import client, tools
+import base64
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from apiclient import errors, discovery
 
-from oauth2client import tools
-from apiclient.discovery import build
-from oauth2client.client import flow_from_clientsecrets
-from oauth2client.file import Storage
-from oauth2client.tools import run
-
-
-# Path to the client_secret.json file downloaded from the Developer Console
+SCOPES = 'https://www.googleapis.com/auth/gmail.send'
 CLIENT_SECRET_FILE = 'client_secret.json'
+APPLICATION_NAME = 'Gmail API Python Send Email'
 
-# Check https://developers.google.com/gmail/api/auth/scopes for all available scopes
-OAUTH_SCOPE = 'https://www.googleapis.com/auth/gmail.compose'
+def get_credentials():
+    home_dir = os.path.expanduser('~')
+    credential_dir = os.path.join(home_dir, '.credentials')
+    if not os.path.exists(credential_dir):
+        os.makedirs(credential_dir)
+    credential_path = os.path.join(credential_dir,
+                                   'gmail-python-email-send.json')
+    store = oauth2client.file.Storage(credential_path)
+    credentials = store.get()
+    if not credentials or credentials.invalid:
+        flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
+        flow.user_agent = APPLICATION_NAME
+        credentials = tools.run_flow(flow, store)
+        print 'Storing credentials to ' + credential_path
+    return credentials
 
-# Location of the credentials storage file
-STORAGE = Storage('gmail.storage')
+def SendMessage(sender, to, subject, msgHtml, msgPlain):
+    credentials = get_credentials()
+    http = credentials.authorize(httplib2.Http())
+    service = discovery.build('gmail', 'v1', http=http)
+    message1 = CreateMessage(sender, to, subject, msgHtml, msgPlain)
+    SendMessageInternal(service, "me", message1)
 
-# Start the OAuth flow to retrieve credentials
-flow = flow_from_clientsecrets(CLIENT_SECRET_FILE, scope=OAUTH_SCOPE)
-http = httplib2.Http()
+def SendMessageInternal(service, user_id, message):
+    try:
+        message = (service.users().messages().send(userId=user_id, body=message).execute())
+        print 'Message Id: %s' % message['id']
+        return message
+    except errors.HttpError, error:
+        print 'An error occurred: %s' % error
 
-# Try to retrieve credentials from storage or run the flow to generate them
-credentials = STORAGE.get()
-if credentials is None or credentials.invalid:
-  credentials = run(flow, STORAGE, http=http)
+def CreateMessage(sender, to, subject, msgHtml, msgPlain):
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = sender
+    msg['To'] = to
+    msg.attach(MIMEText(msgPlain, 'plain'))
+    msg.attach(MIMEText(msgHtml, 'html'))
+    return {'raw': base64.urlsafe_b64encode(msg.as_string())}
 
-# Authorize the httplib2.Http object with our credentials
-http = credentials.authorize(http)
+def main():
+    to = "to@address.com"
+    sender = "from@address.com"
+    subject = "subject"
+    msgHtml = "Hi<br/>Html Email"
+    msgPlain = "Hi\nPlain Email"
+    SendMessage(sender, to, subject, msgHtml, msgPlain)
 
-# Build the Gmail service from discovery
-gmail_service = build('gmail', 'v1', http=http)
-
-# create a message to send
-message = MIMEText("Message goes here.")
-message['to'] = "rwein03@gmail.com"
-message['from'] = "momorenjr@gmail.com"
-message['subject'] = "your subject goes here"
-body = {'raw': base64.b64encode(message.as_string())}
-
-# send it
-try:
-  message = (gmail_service.users().messages().send(userId="me", body=body).execute())
-  print('Message Id: %s' % message['id'])
-  print(message)
-except Exception as error:
-  print('An error occurred: %s' % error)
+if __name__ == '__main__':
+    main()
