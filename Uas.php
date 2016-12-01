@@ -1,88 +1,73 @@
-<?php
-require_once __DIR__ . '/vendor/autoload.php';
+from __future__ import print_function
+import httplib2
+import os
+
+from apiclient import discovery
+from oauth2client import client
+from oauth2client import tools
+from oauth2client.file import Storage
+
+try:
+    import argparse
+    flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
+except ImportError:
+    flags = None
+
+# If modifying these scopes, delete your previously saved credentials
+# at ~/.credentials/gmail-python-quickstart.json
+SCOPES = 'https://www.googleapis.com/auth/gmail.readonly'
+CLIENT_SECRET_FILE = 'client_secret.json'
+APPLICATION_NAME = 'Gmail API Python Quickstart'
 
 
-define('APPLICATION_NAME', 'Gmail API PHP Quickstart');
-define('CREDENTIALS_PATH', '~/.credentials/gmail-php-quickstart.json');
-define('CLIENT_SECRET_PATH', __DIR__ . '/client_secret.json');
-// If modifying these scopes, delete your previously saved credentials
-// at ~/.credentials/gmail-php-quickstart.json
-define('SCOPES', implode(' ', array(
-  Google_Service_Gmail::GMAIL_READONLY)
-));
+def get_credentials():
+    """Gets valid user credentials from storage.
 
-if (php_sapi_name() != 'cli') {
-  throw new Exception('This application must be run on the command line.');
-}
+    If nothing has been stored, or if the stored credentials are invalid,
+    the OAuth2 flow is completed to obtain the new credentials.
 
-/**
- * Returns an authorized API client.
- * @return Google_Client the authorized client object
- */
-function getClient() {
-  $client = new Google_Client();
-  $client->setApplicationName(APPLICATION_NAME);
-  $client->setScopes(SCOPES);
-  $client->setAuthConfig(CLIENT_SECRET_PATH);
-  $client->setAccessType('offline');
+    Returns:
+        Credentials, the obtained credential.
+    """
+    home_dir = os.path.expanduser('~')
+    credential_dir = os.path.join(home_dir, '.credentials')
+    if not os.path.exists(credential_dir):
+        os.makedirs(credential_dir)
+    credential_path = os.path.join(credential_dir,
+                                   'gmail-python-quickstart.json')
 
-  // Load previously authorized credentials from a file.
-  $credentialsPath = expandHomeDirectory(CREDENTIALS_PATH);
-  if (file_exists($credentialsPath)) {
-    $accessToken = json_decode(file_get_contents($credentialsPath), true);
-  } else {
-    // Request authorization from the user.
-    $authUrl = $client->createAuthUrl();
-    printf("Open the following link in your browser:\n%s\n", $authUrl);
-    print 'Enter verification code: ';
-    $authCode = trim(fgets(STDIN));
+    store = Storage(credential_path)
+    credentials = store.get()
+    if not credentials or credentials.invalid:
+        flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
+        flow.user_agent = APPLICATION_NAME
+        if flags:
+            credentials = tools.run_flow(flow, store, flags)
+        else: # Needed only for compatibility with Python 2.6
+            credentials = tools.run(flow, store)
+        print('Storing credentials to ' + credential_path)
+    return credentials
 
-    // Exchange authorization code for an access token.
-    $accessToken = $client->fetchAccessTokenWithAuthCode($authCode);
+def main():
+    """Shows basic usage of the Gmail API.
 
-    // Store the credentials to disk.
-    if(!file_exists(dirname($credentialsPath))) {
-      mkdir(dirname($credentialsPath), 0700, true);
-    }
-    file_put_contents($credentialsPath, json_encode($accessToken));
-    printf("Credentials saved to %s\n", $credentialsPath);
-  }
-  $client->setAccessToken($accessToken);
+    Creates a Gmail API service object and outputs a list of label names
+    of the user's Gmail account.
+    """
+    credentials = get_credentials()
+    http = credentials.authorize(httplib2.Http())
+    service = discovery.build('gmail', 'v1', http=http)
 
-  // Refresh the token if it's expired.
-  if ($client->isAccessTokenExpired()) {
-    $client->fetchAccessTokenWithRefreshToken($client->getRefreshToken());
-    file_put_contents($credentialsPath, json_encode($client->getAccessToken()));
-  }
-  return $client;
-}
+    results = service.users().labels().list(userId='me').execute()
+    labels = results.get('labels', [])
 
-/**
- * Expands the home directory alias '~' to the full path.
- * @param string $path the path to expand.
- * @return string the expanded path.
- */
-function expandHomeDirectory($path) {
-  $homeDirectory = getenv('HOME');
-  if (empty($homeDirectory)) {
-    $homeDirectory = getenv('HOMEDRIVE') . getenv('HOMEPATH');
-  }
-  return str_replace('~', realpath($homeDirectory), $path);
-}
+    if not labels:
+        print('No labels found.')
+    else:
+      print('Labels:')
+      for label in labels:
+        print(label['name'])
 
-// Get the API client and construct the service object.
-$client = getClient();
-$service = new Google_Service_Gmail($client);
 
-// Print the labels in the user's account.
-$user = 'me';
-$results = $service->users_labels->listUsersLabels($user);
-
-if (count($results->getLabels()) == 0) {
-  print "No labels found.\n";
-} else {
-  print "Labels:\n";
-  foreach ($results->getLabels() as $label) {
-    printf("- %s\n", $label->getName());
-  }
-}
+if __name__ == '__main__':
+    main()
