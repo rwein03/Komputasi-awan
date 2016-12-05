@@ -17,11 +17,12 @@ if creds is None or creds.invalid:
 GMAIL = build('gmail', 'v1', http=creds.authorize(Http()))
 
 threads = GMAIL.users().threads().list(userId='me').execute().get('threads', [])
+jumlah = input('masukka yang akan di tampilkan : ')
 for thread in threads:
 	tdata = GMAIL.users().threads().get(userId='me', id=thread['id']).execute()
 	nmsgs = len(tdata['messages'])
 	
-	if nmsgs >= 2:
+	if nmsgs >= jumlah:
 		msg = tdata['messages'][0]['payload']
 		subject = ''
 		for header in msg['headers']:
